@@ -1,0 +1,685 @@
+<!DOCTYPE html>
+<html lang="th">
+
+<head>
+
+    <meta charset="UTF-8">
+       
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>จำลองเส้นทาง Royal Run (แจ้งเตือนตำแหน่ง)</title>
+        <style>
+        /* CSS styles */
+        body {
+            margin: 0;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background-color: #f0f0f0;
+            font-family: sans-serif;
+            flex-direction: column;
+            /* จัดองค์ประกอบให้อยู่ในแนวตั้ง */
+        }
+
+        #map-container {
+            width: 600px;
+            /* ความกว้างของแผนที่จำลอง */
+            height: 400px;
+            /* ความสูงของแผนที่จำลอง */
+            background-image: url('img/1.png');
+            /* ตรวจสอบให้แน่ใจว่า path ถูกต้อง */
+            background-size: cover;
+            background-repeat: no-repeat;
+            background-position: center;
+            border: 1px solid #ccc;
+            position: relative;
+            overflow: hidden;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+            cursor: crosshair;
+            /* เปลี่ยน cursor เมื่ออยู่บนแผนที่ */
+        }
+
+        #routeCanvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+        }
+
+        #bus {
+            width: 15px;
+            height: 15px;
+            background-color: rgb(155, 28, 75);
+            /* สีแดง */
+            border-radius: 50%;
+            position: absolute;
+            transform: translate(-50%, -50%);
+            transition: transform 0.1s linear;
+            box-shadow: 0 0 4px rgba(0, 0, 0, 0.4);
+            z-index: 2;
+            opacity: 1;
+        }
+
+        .hidden {
+            opacity: 0;
+            transition: opacity 0s;
+        }
+
+        #controls {
+            margin-top: 20px;
+            text-align: center;
+        }
+
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            margin: 5px;
+            cursor: pointer;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            background-color: #f9f9f9;
+        }
+
+        button:hover {
+            background-color: #e0e0e0;
+        }
+
+        /* สไตล์สำหรับปุ่มย้อนกลับ */
+        #backButtonContainer {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            z-index: 100;
+            /* ให้อยู่เหนือทุกอย่าง */
+            display: none;
+            /* ซ่อนไว้ในตอนแรก */
+        }
+
+        #backButton {
+            width: 100px;
+            height: 30px;
+            padding: 8px 15px;
+            font-size: 10px;
+            align-items: center;
+            background-color: #3a5878;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        }
+
+        #backButton:hover {
+            background-color: #3a5878b9;
+        }
+
+        /* สไตล์สำหรับข้อความแจ้งเตือน */
+        #notification {
+            position: absolute;
+            top: 10%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 100px;
+            height: 20px;
+            background-color: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 10px 10px 10px 10px;
+            border-radius: 8px;
+            text-align: center;
+            align-items: center;
+            font-size: 12px;
+            z-index: 120;
+            display: none;
+            /* ซ่อนไว้ในตอนแรก */
+            animation: fadeInOut 2s forwards;
+            /* เพิ่ม animation */
+        }
+
+        @keyframes fadeInOut {
+            0% {
+                opacity: 0;
+            }
+
+            20% {
+                opacity: 1;
+            }
+
+            80% {
+                opacity: 1;
+            }
+
+            100% {
+                opacity: 0;
+            }
+        }
+
+
+        .menu-icon {
+            cursor: pointer;
+            font-size: 32px;
+            color: #000000;
+            user-select: none;
+            padding: 10px;
+            position: fixed;
+            top: 9.9px;
+            left: 10px;
+            z-index: 1000;
+            border-radius: 6px;
+        }
+
+        .menu-icon:hover {
+            color: #53525286;
+        }
+
+        .navbar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 150px;
+            height: 100vh;
+            background-color: rgba(0, 0, 0, 0.85);
+            padding-top: 70px;
+            display: flex;
+            flex-direction: column;
+            transform: translateX(-100%);
+            transition: transform 0.3s ease-in-out;
+            z-index: 999;
+        }
+
+        .navbar.show {
+            transform: translateX(0);
+        }
+
+
+        .navbar a {
+            color: #fff;
+            text-decoration: none;
+            padding: 12px 20px;
+            font-size: 15px;
+            transition: 0.2s;
+        }
+
+        .navbar a:hover {
+            background-color: rgba(255, 255, 255, 0.1);
+            color: #ffd700;
+        }
+
+    
+    </style>
+</head>
+
+<body>
+
+        <div class="menu-icon" onclick="toggleMenu()">☰</div>
+        <div class="navbar" id="navbar">
+                <a href="main.html">🏠 หน้าหลัก</a>
+                <a href="Bus lines.html">🚌 รายละเอียดสายรถเมล์</a>
+                <a href="van lines.html">🚐 รายละเอียดสายตู้</a>
+                <a href="index.html">หน้าค้นหา</a>
+                <a href="test.html">ดูเส้นทางเดินรถ538</a>
+                <a href="https://www.route.in.th/
+            ">🌐 ข้อมูลสายรถ</a>
+                <a href="https://maps.google.com/">🗺️ แผนที่</a>
+                <a href="#">🔐 เข้าสู่ระบบ</a>
+            </div>
+
+        <div id="targetCircle"></div>
+
+        <div id="map-container">
+                <canvas id="routeCanvas"></canvas>
+                <div id="bus"></div>
+                <div id="notification"></div>
+        <div id="userLocationCircle"></div>    
+    </div>
+
+        <div id="controls">
+                <p>คลิกบนแผนที่เพื่อกำหนดเส้นทาง หรือโหลดเส้นทางที่บันทึกไว้</p>
+                <button id="resetRoute">รีเซ็ตเส้นทาง</button>
+                <button id="startAnimation">เริ่ม/หยุด อนิเมชัน</button>
+                <button id="saveAndDisplay">บันทึก & แสดงอนิเมชัน</button>
+                <button id="loadRoute">โหลดเส้นทาง</button>
+        <button id="markUserLocation"></button>    
+    </div>
+
+        <div id="backButtonContainer">
+                <button id="backButton">ย้อนกลับ</button>
+            </div>
+
+       
+    <script>
+        /* JavaScript code */
+        document.addEventListener('DOMContentLoaded', () => {
+            const bus = document.getElementById('bus');
+            const canvas = document.getElementById('routeCanvas');
+            const ctx = canvas.getContext('2d');
+            const mapContainer = document.getElementById('map-container');
+            const controlsDiv = document.getElementById('controls');
+            const backButtonContainer = document.getElementById('backButtonContainer');
+            const notificationDiv = document.getElementById('notification'); // อ้างอิงถึง div ข้อความแจ้งเตือน
+            const targetCircle = document.getElementById('targetCircle'); // อ้างอิงถึงวงกลมเป้าหมาย
+            const userLocationCircle = document.getElementById('userLocationCircle'); // New: Reference to user's location circle
+
+            const resetRouteBtn = document.getElementById('resetRoute');
+            const startAnimationBtn = document.getElementById('startAnimation');
+            const saveAndDisplayBtn = document.getElementById('saveAndDisplay');
+            const loadRouteBtn = document.getElementById('loadRoute');
+            const backButton = document.getElementById('backButton');
+            const markUserLocationBtn = document.getElementById('markUserLocation'); // New: Reference to the new button
+
+            canvas.width = 600;
+            canvas.height = 400;
+
+            let routeCoordinates = [];
+            let currentPointIndex = 0;
+            let animationFrameId;
+            let position = { x: 0, y: 0 };
+            const speed = 0.2; // 
+            let isAnimating = false;
+            const LOCAL_STORAGE_KEY = 'savedRoutePoints';
+
+            let isDisplayMode = false;
+            let userMarkedLocation = null; // To store the user's marked location
+
+            // พิกัดของวงกลมเป้าหมาย (สามารถปรับได้ตามต้องการ)
+            // ควรตั้งค่าพิกัดให้สัมพันธ์กับ map-container
+            const targetCirclePosition = { x: 450, y: 150 }; // ตัวอย่าง: ตำแหน่งที่ 450px จากซ้าย, 150px จากบน
+            targetCircle.style.left = `${targetCirclePosition.x}px`;
+            targetCircle.style.top = `${targetCirclePosition.y}px`;
+
+
+            let hasNotifiedTargetCircle = false; // สถานะสำหรับแจ้งเตือนเมื่อโดนวงกลมเป้าหมาย
+
+            // ฟังก์ชันสำหรับแสดงข้อความแจ้งเตือน
+            function showNotification(message) {
+                notificationDiv.textContent = message;
+                notificationDiv.style.display = 'block';
+                notificationDiv.style.animation = 'none'; // รีเซ็ต animation
+                void notificationDiv.offsetWidth; // Trigger reflow
+                notificationDiv.style.animation = 'fadeInOut 2s forwards'; // เริ่ม animation ใหม่
+                setTimeout(() => {
+                    notificationDiv.style.display = 'none';
+                }, 2000); // ซ่อนหลังจาก 2 วินาที (เท่ากับระยะเวลา animation)
+            }
+
+            function drawRoute() {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+                if (routeCoordinates.length > 1) {
+                    ctx.beginPath();
+                    ctx.moveTo(routeCoordinates[0].x, routeCoordinates[0].y);
+
+                    for (let i = 1; i < routeCoordinates.length; i++) {
+                        ctx.lineTo(routeCoordinates[i].x, routeCoordinates[i].y);
+                    }
+
+                    ctx.strokeStyle = '#0000FF'; // สีเส้น (น้ำเงิน)
+                    ctx.lineWidth = 4; // ความหนาของเส้น
+                    ctx.lineJoin = 'round';
+                    ctx.stroke();
+                }
+
+                if (!isDisplayMode) {
+                    for (const point of routeCoordinates) {
+                        ctx.beginPath();
+                        ctx.arc(point.x, point.y, 6, 0, Math.PI * 2); // วงกลมรัศมี 6px
+                        ctx.fillStyle = '#ffffff'; // สีขาว
+                        ctx.fill();
+                        ctx.strokeStyle = '#333';
+                        ctx.lineWidth = 1;
+                        ctx.stroke();
+                    }
+                }
+            }
+
+            function animateBus() {
+                if (!isAnimating || routeCoordinates.length < 2) {
+                    animationFrameId = requestAnimationFrame(animateBus);
+                    return;
+                }
+
+                const target = routeCoordinates[currentPointIndex];
+                const dx = target.x - position.x;
+                const dy = target.y - position.y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+
+                if (distance <= speed) {
+                    position.x = target.x;
+                    position.y = target.y;
+                    bus.style.left = `${position.x}px`;
+                    bus.style.top = `${position.y}px`;
+
+                    currentPointIndex++;
+                    if (currentPointIndex >= routeCoordinates.length) {
+                        currentPointIndex = 0; // วนกลับไปจุดเริ่มต้น
+                        hasNotifiedTargetCircle = false; // รีเซ็ตสถานะการแจ้งเตือนเมื่อครบรอบ
+
+                        bus.classList.add('hidden');
+
+                        if (routeCoordinates.length > 0) {
+                            position.x = routeCoordinates[0].x;
+                            position.y = routeCoordinates[0].y;
+                            bus.style.left = `${position.x}px`;
+                            bus.style.top = `${position.y}px`;
+                        } else {
+                            position.x = 0;
+                            position.y = 0;
+                            bus.style.left = `0px`;
+                            bus.style.top = `0px`;
+                        }
+
+                        setTimeout(() => {
+                            bus.classList.remove('hidden');
+                            if (routeCoordinates.length < 2 && isAnimating) {
+                                isAnimating = false;
+                                startAnimationBtn.textContent = 'เริ่มอนิเมชัน';
+                            }
+                        }, 50);
+                    }
+                } else {
+                    position.x += (dx / distance) * speed;
+                    position.y += (dy / distance) * speed;
+                    bus.style.left = `${position.x}px`;
+                    bus.style.top = `${position.y}px`;
+                }
+
+                // ตรวจสอบการชนกันระหว่าง bus และ targetCircle
+                checkCollision();
+                checkUserLocationCollision(); // New: Check collision with user's marked location
+
+                animationFrameId = requestAnimationFrame(animateBus);
+            }
+
+            function checkCollision() {
+                if (hasNotifiedTargetCircle) return; // ถ้าแจ้งเตือนไปแล้ว ไม่ต้องตรวจสอบอีก
+
+                const busRect = bus.getBoundingClientRect();
+                const targetCircleRect = targetCircle.getBoundingClientRect();
+
+                // ปรับตำแหน่งให้สัมพันธ์กับ map-container เนื่องจาก bus และ targetCircle อยู่ใน map-container
+                const busX = position.x;
+                const busY = position.y;
+                const targetX = targetCirclePosition.x; // ใช้พิกัดที่กำหนดไว้
+                const targetY = targetCirclePosition.y; // ใช้พิกัดที่กำหนดไว้
+
+                // รัศมีของ bus และ targetCircle (หาร 2 เนื่องจาก width/height คือเส้นผ่านศูนย์กลาง)
+                const busRadius = bus.offsetWidth / 2;
+                const targetCircleRadius = targetCircle.offsetWidth / 2;
+
+                // คำนวณระยะห่างระหว่างจุดศูนย์กลางของวงกลมทั้งสอง
+                const distanceX = busX - targetX;
+                const distanceY = busY - targetY;
+                const distanceBetweenCenters = Math.sqrt(distanceX * distanceX + distanceY * distanceY);
+
+                // ถ้าชนกัน (ระยะห่างน้อยกว่าหรือเท่ากับผลรวมของรัศมี)
+                if (distanceBetweenCenters <= (busRadius + targetCircleRadius)) {
+                    showNotification('ตำแหน่งของคุณ');
+                    hasNotifiedTargetCircle = true; // ตั้งค่าสถานะว่าแจ้งเตือนแล้ว
+                }
+            }
+
+            // New: Function to check collision with user's marked location
+            function checkUserLocationCollision() {
+                if (!userMarkedLocation || userLocationCircle.style.display === 'none') return;
+
+                const busRadius = bus.offsetWidth / 2;
+                const userCircleRadius = userLocationCircle.offsetWidth / 2;
+
+                const distanceX = position.x - userMarkedLocation.x;
+                const distanceY = position.y - userMarkedLocation.y;
+                const distanceBetweenCenters = Math.sqrt(distanceX * distanceX + distanceY * distanceY);
+
+                if (distanceBetweenCenters <= (busRadius + userCircleRadius)) {
+                    showNotification('ตำแหน่งของคุณ (ผู้ใช้)');
+                    // You might want to remove the user location circle after notification or keep it
+                    // userLocationCircle.style.display = 'none';
+                    userMarkedLocation = null; // Reset marked location after collision
+                }
+            }
+
+
+            function setDisplayMode(enabled) {
+                isDisplayMode = enabled;
+                if (enabled) {
+                    controlsDiv.style.display = 'none';
+                    backButtonContainer.style.display = 'block';
+                    mapContainer.style.cursor = 'default';
+                    if (routeCoordinates.length >= 2 && !isAnimating) {
+                        isAnimating = true;
+                        currentPointIndex = 0;
+                        position = { x: routeCoordinates[0].x, y: routeCoordinates[0].y };
+                        bus.style.left = `${position.x}px`;
+                        bus.style.top = `${position.y}px`;
+                        bus.classList.remove('hidden');
+                        hasNotifiedTargetCircle = false; // รีเซ็ตสถานะเมื่อเริ่มโหมดแสดงผลใหม่
+                    } else if (routeCoordinates.length < 2) {
+                        bus.classList.add('hidden');
+                        isAnimating = false;
+                    }
+                } else {
+                    controlsDiv.style.display = 'block';
+                    backButtonContainer.style.display = 'none';
+                    mapContainer.style.cursor = 'crosshair';
+                    isAnimating = false;
+                    startAnimationBtn.textContent = 'เริ่มอนิเมชัน';
+                    hasNotifiedTargetCircle = false; // รีเซ็ตสถานะเมื่อออกจากโหมดแสดงผล
+                }
+                drawRoute();
+            }
+
+            mapContainer.addEventListener('click', (event) => {
+                if (isDisplayMode) return;
+
+                const rect = mapContainer.getBoundingClientRect();
+                const x = event.clientX - rect.left;
+                const y = event.clientY - rect.top;
+
+                routeCoordinates.push({ x: x, y: y });
+                drawRoute();
+
+                if (routeCoordinates.length === 1) {
+                    position.x = x;
+                    position.y = y;
+                    bus.style.left = `${position.x}px`;
+                    bus.style.top = `${position.y}px`;
+                    bus.classList.remove('hidden');
+                }
+            });
+
+            // Event Listener สำหรับคลิกที่วงกลมเป้าหมาย
+            targetCircle.addEventListener('click', () => {
+                showNotification('ตำแหน่งของคุณ');
+            });
+
+            // New: Event Listener for the "Mark Your Location" button
+            markUserLocationBtn.addEventListener('click', () => {
+                if (navigator.geolocation) {
+                    navigator.geolocation.getCurrentPosition((geoPosition) => {
+                        const mapRect = mapContainer.getBoundingClientRect();
+                        // Assuming the map is 600x400, we need to scale the actual lat/lng
+                        // This is a very simplified mapping and might not be accurate for real-world coordinates
+                        // For a real map, you'd use a library like Leaflet or Google Maps API
+                        const scaleX = canvas.width / mapRect.width;
+                        const scaleY = canvas.height / mapRect.height;
+
+                        // This is a placeholder for how you *might* map a real lat/lng to your pixel map.
+                        // In a real scenario, you'd need a more robust coordinate transformation.
+                        // For demonstration, we'll just place it randomly if geoPosition is not accurate.
+                        const userX = (geoPosition.coords.longitude + 180) / 360 * canvas.width; // Placeholder mapping
+                        const userY = (90 - geoPosition.coords.latitude) / 180 * canvas.height; // Placeholder mapping
+
+                        // If the map is fixed, you might want to pick a central point or a logical starting point
+                        // For this simulation, we'll just place it somewhere if it's the first click.
+                        const x = userX || mapContainer.offsetWidth / 2;
+                        const y = userY || mapContainer.offsetHeight / 2;
+
+                        userMarkedLocation = { x: x, y: y };
+                        userLocationCircle.style.left = `${userMarkedLocation.x}px`;
+                        userLocationCircle.style.top = `${userMarkedLocation.y}px`;
+                        userLocationCircle.style.display = 'block';
+                        showNotification('ตำแหน่งของคุณถูกมาร์กแล้ว');
+                    }, (error) => {
+                        console.error('Error getting geolocation:', error);
+                        alert('ไม่สามารถระบุตำแหน่งปัจจุบันของคุณได้ กรุณาลองใหม่หรืออนุญาตการเข้าถึงตำแหน่ง.');
+                        // Fallback: If geolocation fails, allow manual marking on the map
+                        alert('คุณสามารถคลิกบนแผนที่เพื่อกำหนดตำแหน่งด้วยตนเองได้');
+                        mapContainer.style.cursor = 'crosshair'; // Change cursor to allow clicking
+                        mapContainer.removeEventListener('click', addPointToRoute); // Remove route clicking listener
+                        mapContainer.addEventListener('click', setUserManualLocation); // Add manual location listener
+                    });
+                } else {
+                    alert('เบราว์เซอร์ของคุณไม่รองรับ Geolocation. คุณสามารถคลิกบนแผนที่เพื่อกำหนดตำแหน่งด้วยตนเองได้');
+                    mapContainer.style.cursor = 'crosshair';
+                    mapContainer.removeEventListener('click', addPointToRoute);
+                    mapContainer.addEventListener('click', setUserManualLocation);
+                }
+            });
+
+            // New: Function for manually setting user location if geolocation is not available
+            function setUserManualLocation(event) {
+                const rect = mapContainer.getBoundingClientRect();
+                const x = event.clientX - rect.left;
+                const y = event.clientY - rect.top;
+
+                userMarkedLocation = { x: x, y: y };
+                userLocationCircle.style.left = `${userMarkedLocation.x}px`;
+                userLocationCircle.style.top = `${userMarkedLocation.y}px`;
+                userLocationCircle.style.display = 'block';
+                showNotification('ตำแหน่งของคุณถูกมาร์กแล้ว (กำหนดเอง)');
+
+                // After marking, revert cursor and original map click listener
+                mapContainer.style.cursor = 'default';
+                mapContainer.removeEventListener('click', setUserManualLocation);
+                mapContainer.addEventListener('click', addPointToRoute);
+            }
+
+            // A helper function to ensure the original map click listener works when not in manual location mode
+            function addPointToRoute(event) {
+                const rect = mapContainer.getBoundingClientRect();
+                const x = event.clientX - rect.left;
+                const y = event.clientY - rect.top;
+
+                routeCoordinates.push({ x: x, y: y });
+                drawRoute();
+
+                if (routeCoordinates.length === 1) {
+                    position.x = x;
+                    position.y = y;
+                    bus.style.left = `${position.x}px`;
+                    bus.style.top = `${position.y}px`;
+                    bus.classList.remove('hidden');
+                }
+            }
+
+
+            resetRouteBtn.addEventListener('click', () => {
+                routeCoordinates = [];
+                currentPointIndex = 0;
+                isAnimating = false;
+                startAnimationBtn.textContent = 'เริ่มอนิเมชัน';
+                bus.classList.add('hidden');
+                position = { x: 0, y: 0 };
+                drawRoute();
+                localStorage.removeItem(LOCAL_STORAGE_KEY);
+                hasNotifiedTargetCircle = false; // รีเซ็ตสถานะการแจ้งเตือน
+                userLocationCircle.style.display = 'none'; // Hide user's marked location
+                userMarkedLocation = null; // Clear user's marked location
+                alert('เส้นทางถูกรีเซ็ตและลบจากหน่วยความจำแล้ว!');
+            });
+
+            startAnimationBtn.addEventListener('click', () => {
+                if (routeCoordinates.length < 2) {
+                    alert('กรุณากำหนดจุดบนแผนที่อย่างน้อย 2 จุดก่อนเริ่มอนิเมชัน');
+                    return;
+                }
+                isAnimating = !isAnimating;
+                if (isAnimating) {
+                    startAnimationBtn.textContent = 'หยุดอนิเมชัน';
+                    if (currentPointIndex === 0 && (position.x !== routeCoordinates[0].x || position.y !== routeCoordinates[0].y)) {
+                        position = { x: routeCoordinates[0].x, y: routeCoordinates[0].y };
+                        bus.style.left = `${position.x}px`;
+                        bus.style.top = `${position.y}px`;
+                        bus.classList.remove('hidden');
+                    }
+                    hasNotifiedTargetCircle = false; // รีเซ็ตสถานะเมื่อเริ่มอนิเมชันใหม่
+                } else {
+                    startAnimationBtn.textContent = 'เริ่มอนิเมชัน';
+                }
+            });
+
+            saveAndDisplayBtn.addEventListener('click', () => {
+                if (routeCoordinates.length < 2) {
+                    alert('กรุณากำหนดจุดบนแผนที่อย่างน้อย 2 จุดเพื่อบันทึกและเริ่มอนิเมชัน');
+                    return;
+                }
+                try {
+                    const routeString = JSON.stringify(routeCoordinates);
+                    localStorage.setItem(LOCAL_STORAGE_KEY, routeString);
+                    alert('บันทึกเส้นทางเรียบร้อยแล้ว! กำลังเข้าสู่โหมดแสดงผล');
+                    setDisplayMode(true);
+                } catch (e) {
+                    alert('เกิดข้อผิดพลาดในการบันทึกเส้นทาง: ' + e);
+                }
+            });
+
+            loadRouteBtn.addEventListener('click', () => {
+                setDisplayMode(false);
+                if (loadSavedRoute()) {
+                    alert('โหลดเส้นทางเรียบร้อยแล้ว! สามารถเริ่มอนิเมชันได้');
+                } else {
+                    alert('ไม่พบเส้นทางที่บันทึกไว้');
+                }
+            });
+
+            backButton.addEventListener('click', () => {
+                setDisplayMode(false);
+            });
+
+            function loadSavedRoute() {
+                try {
+                    const savedRouteString = localStorage.getItem(LOCAL_STORAGE_KEY);
+                    if (savedRouteString) {
+                        const loadedRoute = JSON.parse(savedRouteString);
+                        if (loadedRoute.length > 0) {
+                            routeCoordinates = loadedRoute;
+                            drawRoute();
+                            currentPointIndex = 0;
+                            position = { x: routeCoordinates[0].x, y: routeCoordinates[0].y };
+                            bus.style.left = `${position.x}px`;
+                            bus.style.top = `${position.y}px`;
+                            bus.classList.remove('hidden');
+                            isAnimating = false;
+                            startAnimationBtn.textContent = 'เริ่มอนิเมชัน';
+                            hasNotifiedTargetCircle = false; // รีเซ็ตสถานะเมื่อโหลดเส้นทาง
+                            return true;
+                        } else {
+                            return false;
+                        }
+                    } else {
+                        return false;
+                    }
+                } catch (e) {
+                    console.error('เกิดข้อผิดพลาดในการโหลดเส้นทาง: ', e);
+                    return false;
+                }
+            }
+
+            if (loadSavedRoute()) {
+                setDisplayMode(true);
+            } else {
+                setDisplayMode(false);
+            }
+
+            animateBus();
+        });
+
+        function toggleMenu() {
+            const navbar = document.getElementById("navbar");
+            navbar.classList.toggle("show");
+        }
+    </script>
+</body>
+
+</html>
